@@ -5,6 +5,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum HdfsError {
+    #[error("configuration error: {0}")]
+    ConfigurationError(#[from] crate::common::config::ConfigurationError),
     #[error("IO error occurred while communicating with HDFS: {0}")]
     IOError(#[from] io::Error),
     #[error("data transfer error: {0}")]

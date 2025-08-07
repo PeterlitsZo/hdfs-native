@@ -40,8 +40,18 @@ pub struct Configuration {
     map: HashMap<String, String>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ConfigurationError {
+    #[error("IO error: {0}")]
+    Io(#[from] io::Error),
+    #[error("failed to parse XML configuration: {0}")]
+    XmlParseError(#[from] roxmltree::Error),
+}
+
+pub type ConfigurationResult<T> = std::result::Result<T, ConfigurationError>;
+
 impl Configuration {
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> ConfigurationResult<Self> {
         let mut map: HashMap<String, String> = HashMap::new();
 
         if let Some(conf_dir) = Self::get_conf_dir() {
@@ -60,7 +70,7 @@ impl Configuration {
         Ok(Configuration { map })
     }
 
-    pub fn new_with_config(conf_map: HashMap<String, String>) -> io::Result<Self> {
+    pub fn new_with_config(conf_map: HashMap<String, String>) -> ConfigurationResult<Self> {
         let mut conf = Self::new()?;
         conf.map.extend(conf_map);
         Ok(conf)
@@ -192,9 +202,14 @@ impl Configuration {
         ReplaceDatanodeOnFailure::new(policy, best_effort)
     }
 
-    fn read_from_file(path: &Path) -> io::Result<Vec<(String, String)>> {
-        let content = fs::read_to_string(path)?;
-        let tree = roxmltree::Document::parse(&content).unwrap();
+    fn read_from_file(path: &Path) -> ConfigurationResult<Vec<(String, String)>> {
+        let content = fs::read_to_string(path).map_err(ConfigurationError::Io)?;
+        let opts = roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..Default::default()
+        };
+        let tree = roxmltree::Document::parse_with_options(&content, opts)
+            .map_err(ConfigurationError::XmlParseError)?;
 
         let pairs = tree
             .root()
